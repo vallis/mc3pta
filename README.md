@@ -1,6 +1,6 @@
 # mc3pta #
 
-This is the JPL's group Bayesian-inference pipeline for the [first IPTA mock data challenge](http://www.ipta4gw.org/?page_id=89).
+This is the JPL's group Bayesian-inference pipeline for the [first IPTA mock data challenge](http://www.ipta4gw.org/?page_id=89). See also our [submission](http://www.vallis.org/ipta/submission.html) to the challenge.
 
 The pipeline estimates GWB and pulsar-noise parameters using Markov-Chain Monte Carlo integration with time-domain covariance-matrix evaluation of likelihoods, following van Haasteren et al. ([2009](http://adsabs.harvard.edu/abs/2009MNRAS.395.1005V)), automatically marginalizing over timing-solution uncertainties.
 
@@ -84,3 +84,8 @@ The `emcee` ensemble sampler evolves a population of walkers, and the last-step 
     In this case, we could run
 
         $ python postprocess.py open1-test -n 74 -H
+
+## Contact ##
+
+* [_Michele Vallisneri_](mailto:vallis@vallis.org)
+
