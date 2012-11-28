@@ -82,6 +82,7 @@ def Cgw_100ns(alphaab,times_f,alpha=-2/3,fL=1.0/10000,approx_ksum=False):
     # the variance, as computed below, is in units of year^2; we convert it
     # to units of (100 ns)^2, so the multiplier is ~ 10^28
     year100ns = year/1e-7
+    tol = 1e-5
 
     # the exact solutions for alpha = 0, -1 should be acceptable in a small interval around them...
     if abs(alpha) < 1e-7:
@@ -100,10 +101,12 @@ def Cgw_100ns(alphaab,times_f,alpha=-2/3,fL=1.0/10000,approx_ksum=False):
         corr = (year100ns**2 * fL**-4) / (288 * math.pi**2) * (power - x**4 * cosint)
     else:
         # leading-order expansion of Gamma[-2+2*alpha]*Cos[Pi*alpha] around -0.5 and 0.5
-        if abs(alpha - 0.5) < 1e-4:
-            cf = math.pi/2 + (math.pi - math.pi*EulerGamma) * (alpha - 0.5)
-        elif abs(alpha + 0.5) < 1e-4:
-            cf = -math.pi/16 + (EulerGamma*math.pi/6 - 11*math.pi/36) * (alpha + 0.5)
+        if   abs(alpha - 0.5) < tol:
+            cf =  math.pi/2   + (math.pi - math.pi*EulerGamma)              * (alpha - 0.5)
+        elif abs(alpha + 0.5) < tol:
+            cf = -math.pi/12  + (-11*math.pi/36 + EulerGamma*math.pi/6)     * (alpha + 0.5)
+        elif abs(alpha + 1.5) < tol:
+            cf =  math.pi/240 + (137*math.pi/7200 - EulerGamma*math.pi/120) * (alpha + 1.5)
         else:
             cf = SS.gamma(-2+2*alpha) * math.cos(math.pi*alpha)
 
