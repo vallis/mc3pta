@@ -64,6 +64,8 @@ cdef extern from "tempo2.h":
 
     int turn_hms(double turn,char *hms)
 
+    void textOutput(pulsar *psr,int npsr,double globalParameter,int nGlobal,int outRes,int newpar,char *fname)
+    void writeTim(char *timname,pulsar *psr,char *fileFormat)
 
 # TO DO: should I do also pre-fit values?
 cdef class tempopar:
@@ -157,8 +159,12 @@ class prefitpar(object):
 # but all attributes must be defined in the code
 
 cdef class tempopulsar:
+    cpdef object parfile
+    cpdef object timfile
+
     cdef int npsr           # number of pulsars
     cdef pulsar *psr        # array of pulsar structures
+
     cpdef object pardict    # dictionary of parameter proxies
     cpdef public object prefit     # dictionary of pre-fit parameters
     cpdef public int nobs   # number of observations (public)
@@ -215,6 +221,9 @@ cdef class tempopulsar:
 
         if timfile is None:
             timfile = re.sub('\.par$','.tim',parfile)
+
+        self.parfile = parfile
+        self.timfile = timfile
 
         if not os.path.isfile(parfile) or not os.path.isfile(timfile):
             raise IOError, "Cannot find parfile (%s) or timfile (%s)!" % (parfile,timfile)
@@ -364,6 +373,7 @@ cdef class tempopulsar:
         return ret
 
     # run tempo2 fit
+    # TO DO: see if the parameter-number mismatch is a problem
     def fit(self):
         updateBatsAll(self.psr,self.npsr)
         formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
@@ -393,3 +403,27 @@ cdef class tempopulsar:
         res, err = self.residuals(), self.toaerrs
 
         return -0.5 * numpy.sum(res * res / (1e-12 * err * err))
+
+    def savepar(self,parfile):
+        cdef char parFile[MAX_FILELEN]
+
+        if not parfile:
+            parfile = self.parfile
+
+        stdio.sprintf(parFile,"%s",<char *>parfile)
+
+        # pass pointer to pulsars, number of pulsars,
+        # value and flag for global parameter
+        # flag whether to compute residual (usually 0)
+        # flag whether to write a new file
+        textOutput(&(self.psr[0]),1,0,0,0,1,parFile)
+
+    def savetim(self,timfile):
+        cdef char timFile[MAX_FILELEN]
+
+        if not timfile:
+            timfile = self.timfile
+
+        stdio.sprintf(timFile,"%s",<char *>timfile)
+
+        writeTim(timFile,&(self.psr[0]),'tempo2');
