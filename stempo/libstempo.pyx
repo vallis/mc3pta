@@ -37,6 +37,7 @@ cdef extern from "tempo2.h":
         double freqSSB         # frequency of observation in barycentric frame (in Hz)
 
     ctypedef struct pulsar:
+        char name[100]
         parameter param[MAX_PARAMS]
         observation *obsn
         int nobs
@@ -168,6 +169,7 @@ cdef class tempopulsar:
     cpdef object pardict    # dictionary of parameter proxies
     cpdef public object prefit     # dictionary of pre-fit parameters
     cpdef public int nobs   # number of observations (public)
+    cdef public object name # The pulsar name
 
     # TO DO: is cpdef required here?
     cpdef jumpval, jumperr
@@ -202,6 +204,7 @@ cdef class tempopulsar:
         # create parameter proxies, copy prefit values
 
         self.nobs = self.psr[0].nobs
+        self.name = str(self.psr[0].name)
         self._readpars(fixangularerror=fixangularerror)
 
         # always do a fit...
