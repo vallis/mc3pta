@@ -41,9 +41,9 @@ cdef extern from "tempo2.h":
         double freqSSB         # frequency of observation in barycentric frame (in Hz)
 
     ctypedef struct pulsar:
-        char name[100]
         parameter param[MAX_PARAMS]
         observation *obsn
+        char *name
         int nobs
         int rescaleErrChisq
         int noWarnings
@@ -173,7 +173,6 @@ cdef class tempopulsar:
     cpdef object pardict    # dictionary of parameter proxies
     cpdef public object prefit     # dictionary of pre-fit parameters
     cpdef public int nobs   # number of observations (public)
-    cdef public object name # The pulsar name
 
     # TO DO: is cpdef required here?
     cpdef jumpval, jumperr
@@ -208,7 +207,6 @@ cdef class tempopulsar:
         # create parameter proxies, copy prefit values
 
         self.nobs = self.psr[0].nobs
-        self.name = str(self.psr[0].name)
         self._readpars(fixangularerror=fixangularerror)
 
         # always do a fit...
@@ -240,6 +238,9 @@ cdef class tempopulsar:
 
         readParfile(self.psr,parFile,timFile,self.npsr);   # load the parameters    (all pulsars)
         readTimfile(self.psr,timFile,self.npsr);           # load the arrival times (all pulsars)
+
+    def getname(self):
+        return self.psr[0].name
 
     def _readpars(self,fixangularerror=True):
         cdef parameter *params = self.psr[0].param
@@ -399,6 +400,9 @@ cdef class tempopulsar:
 
 
     # tempo2 design matrix as numpy array [nobs x ndim]
+    # TODO: when start & finish are set, this function gives an error
+    #       self.ndim+1 = ma for FITfuncs
+    #       -- Rutger
     def designmatrix(self):
         cdef int i
         cdef numpy.ndarray[double,ndim=2] ret = numpy.zeros((self.nobs,self.ndim+1),'d')
