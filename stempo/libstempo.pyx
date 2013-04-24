@@ -5,6 +5,7 @@ from cython cimport view
 
 import numpy
 cimport numpy
+import sets
 
 cdef extern from "tempo2.h":
     enum: MAX_PSR_VAL
@@ -33,6 +34,9 @@ cdef extern from "tempo2.h":
         long double residual
         double toaErr          # error on TOA (in us)
         double toaDMErr        # error on TOA due to DM (in us)
+        char **flagID          # ID of flags
+        char **flagVal         # Value of flags
+        int nFlags             # Number of flags set
         double freq            # frequency of observation (in MHz)
         double freqSSB         # frequency of observation in barycentric frame (in Hz)
 
@@ -358,6 +362,41 @@ cdef class tempopulsar:
             ret[i] = obsns[i].residual
 
         return ret
+
+    def uniqueflags(self):
+        """Returns a numpy array (strings) of the flags that have been set at
+            least once in the dataset"""
+        tflags = numpy.array([])
+
+        cdef int i
+        cdef int j
+        for i in range(self.nobs):
+            for j in range(self.psr[0].obsn[i].nFlags):
+                tflags = numpy.append(tflags, self.psr[0].obsn[i].flagID[j])
+
+        return sets.Set(tflags)
+
+    def flagvalue(self, flagid):
+        """Return a numpy array with the flag values for all observations for a
+            given flag id. If the flag is not set, the returned value for that
+            observation is ''
+            returned numpy array is 1D, with length number of observations"""
+
+        flagvals = numpy.empty(self.nobs, dtype='a16')
+        flagvals[:] = ""
+
+        cdef int i
+        cdef int j
+        if flagid in self.uniqueflags():
+            for i in range(self.nobs):
+                for j in range(self.psr[0].obsn[i].nFlags):
+                    if self.psr[0].obsn[i].flagID[j] == flagid:
+                        flagvals[i] = self.psr[0].obsn[i].flagVal[j]
+        else:
+            print "WARNING: flag not found in dataset", self.getname(), flagid
+
+        return flagvals
+
 
     # tempo2 design matrix as numpy array [nobs x ndim]
     def designmatrix(self):
