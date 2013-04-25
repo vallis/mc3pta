@@ -2,6 +2,10 @@
 
 This is the JPL's group Bayesian-inference pipeline for the [first IPTA mock data challenge](http://www.ipta4gw.org/?page_id=89). See also our [submission](http://www.vallis.org/ipta/submission.html) to the challenge.
 
+This is also the home of the `libstempo` Python wrapper for tempo2. If that's what you're looking for, you need only the `stempo` folder; for the moment, _in lieu_ of documentation, have a look at this [tutorial](http://nbviewer.ipython.org/urls/raw.github.com/vallis/mc3pta/master/stempo/libstempo-demo.ipynb).
+
+## Moving on to the challenge... ###
+
 The pipeline estimates GWB and pulsar-noise parameters using Markov-Chain Monte Carlo integration with time-domain covariance-matrix evaluation of likelihoods, following van Haasteren et al. ([2009](http://adsabs.harvard.edu/abs/2009MNRAS.395.1005V)), automatically marginalizing over timing-solution uncertainties.
 
 The integration is run with Goodman and Weare's ([2010](http://msp.org/camcos/2010/5-1/p04.xhtml)) affine-invariant ensemble sampler, as implemented in Foreman-Mackey et al.'s parallel `emcee` ([2012](http://adsabs.harvard.edu/abs/2012arXiv1202.3665F)). `tempo2` (version `cvs-2012-4`) was used to generate residuals and to dump the design matrix for the timing-solution fit, using the `DESIGNMATRIX` plugin. Covariance-matrix and likelihood routines are coded in Python, using the `numpy` and `scipy` vector and linear-algebra libraries, and the `multiprocessing` module for multi-core parallelization.

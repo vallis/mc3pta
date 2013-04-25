@@ -14,6 +14,89 @@ import numpy as N, scipy.special as SS, scipy.linalg as SL
 from util import timing, numpy_seterr
 from constants import *
 
+
+def Cquad(alphaab,times_f,fH=None):
+    if fH is None:
+        return N.identity(len(times_f))
+
+    corr = N.zeros((len(times_f),len(times_f)),'d')
+
+    ps, ts = len(alphaab), len(times_f) / len(alphaab)
+    for i in range(ps):
+        t1, t2 = N.meshgrid(times_f[i*ts:(i+1)*ts],times_f[i*ts:(i+1)*ts])
+
+        # t1, t2 are in days
+        x = (2 * math.pi * (day/year) * fH) * (t1 - t2)
+
+        # the correlation function for bandlimited noise with P(f) = A up to f = fH is
+        # A fH sin(fH tau) / (fH tau), which has units of [A]/[tau] = T^2
+        # but we're interested in normalizing A so that the variance A fH is constant
+        # so we drop the fH and join continuously with the no-fH case
+        with numpy_seterr(divide='ignore'):
+            corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x==0.0,1.0,N.sin(x)/x)
+
+    return corr
+
+def Cexp(alphaab,times_f,lam,alpha=1.0):
+    corr = N.zeros((len(times_f),len(times_f)),'d')
+
+    ps, ts = len(alphaab), len(times_f) / len(alphaab)
+    for i in range(ps):
+        t1, t2 = N.meshgrid(times_f[i*ts:(i+1)*ts],times_f[i*ts:(i+1)*ts])
+        x = (2 * math.pi * (day/year) / lam) * N.abs(t1 - t2)
+
+        corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.exp(-x**alpha)
+
+    return corr
+
+def Cflat(alphaab,times_f,lam):
+    corr = N.zeros((len(times_f),len(times_f)),'d')
+
+    ps, ts = len(alphaab), len(times_f) / len(alphaab)
+    for i in range(ps):
+        t1, t2 = N.meshgrid(times_f[i*ts:(i+1)*ts],times_f[i*ts:(i+1)*ts])
+        x = N.abs(t1 - t2)
+
+        # corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x < lam,1.0,0.0)
+        corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x < lam,1.0 - x/lam,0.0)
+
+    return corr
+
+def Cbandlim(alphaab,times_f,fL,fH):
+    corr = [N.zeros((len(times_f),len(times_f)),'d') for j in range(2)]
+
+    ps, ts = len(alphaab), len(times_f) / len(alphaab)
+    for i in range(ps):
+        t1, t2 = N.meshgrid(times_f[i*ts:(i+1)*ts],times_f[i*ts:(i+1)*ts])
+        deltat = t1 - t2
+
+        x = (2 * math.pi * (day/year) * fL) * deltat
+        with numpy_seterr(divide='ignore'):
+            corr[0][i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x==0.0,1.0,N.sin(x)/x)
+
+        x = (2 * math.pi * (day/year) * fH) * deltat
+        with numpy_seterr(divide='ignore'):
+            corr[1][i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x==0.0,1.0,N.sin(x)/x)
+
+    return corr
+
+def Cbands(alphaab,times_f,fH=12.0,bands=4):
+    deltaf = fH/bands
+    corr = [N.zeros((len(times_f),len(times_f)),'d') for j in range(bands)]
+
+    ps, ts = len(alphaab), len(times_f) / len(alphaab)
+    for i in range(ps):
+        t1, t2 = N.meshgrid(times_f[i*ts:(i+1)*ts],times_f[i*ts:(i+1)*ts])
+        deltat = t1 - t2
+
+        for j in range(bands):
+            x = (2 * math.pi * (day/year) * (j + 1) * deltaf) * deltat
+
+            with numpy_seterr(divide='ignore'):
+                corr[j][i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x==0.0,1.0,N.sin(x)/x)
+
+    return corr
+
 def Cpn_efac(alphaab,times_f,cpn,efac):
     ps, ts = len(alphaab), len(times_f) / len(alphaab)
 
@@ -59,6 +142,67 @@ def Cred_100ns(alphaab,times_f,A=5.77e-22,alpha=1.7,fL=1.0/10000):
         corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = (A[i] * 1.0e14 * year**(alpha[i] - 1) * fL**(1-alpha[i])) * (power + ksum)
 
     return corr
+
+def Cgw_dm_year(alphaab,times_f,freqs_f,d1000=1.0,gamma=8.0/3.0,freq_ref=1e-6*clight/0.20,fL=1.0/500,fH=None):
+    # eq. (12) from Keith et al.
+    # d1000 (@ 1000 days) is given in us^2, must be converted to s^2
+    # spectrum given in yr^3
+    # timing-fluctuation P(f) = A2 (f yr)^(-8/3) yr^3, with A2 given by
+
+    A2 = 0.0112 * (1e-12 * d1000) * (1000.0 * day)**(-5.0/3.0) * year**(-1.0/3.0)
+
+    cgw = Cgw_reg_year(alphaab,times_f,alpha=1.5 - 0.5*gamma,fL=fL,fH=fH,decompose=False)
+
+    # lambda_ref is given in meters, freq_ref in MHz like the fs
+    # TO DO: this matrix is constant, so we could cache it...
+    f1, f2 = N.meshgrid(freqs_f,freqs_f)
+    freqnorm = (freq_ref/f1)**2 * (freq_ref/f2)**2
+
+    return A2 * (freqnorm * cgw)
+
+def Cgw_reg_year(alphaab,times_f,alpha=-2/3,fL=1.0/500,fH=None,decompose=False):
+    t1, t2 = N.meshgrid(times_f,times_f)
+
+    x = 2 * math.pi * (day/year) * fL * N.abs(t1 - t2)
+
+    # print N.min(x), N.max(x), N.max(t2 - t1)
+    year100ns = 1.0   # was year100ns = year/1e-7 for Ggw_reg_year
+
+    norm = (year100ns**2 * fL**(2*alpha - 2)) * 2**(alpha - 3) / (3 * math.pi**1.5 * SS.gamma(1.5 - alpha))
+
+    if fH is not None:
+        # introduce a high-frequency cutoff
+        xi = fH/fL
+
+        # avoid the gamma singularity at alpha = 1
+        if abs(alpha - 1) < 1e-6:
+            diag = math.log(xi) + (EulerGamma + math.log(0.5 * xi)) * math.log(xi) * (alpha - 1)
+        else:
+            diag = 2**(-alpha) * SS.gamma(1 - alpha) * (1 - xi**(2*alpha - 2))
+
+        with numpy_seterr(divide='ignore'):
+            if decompose:
+                corr = N.where(x==0,0.0,x**(1 - alpha) * (SS.kv(1 - alpha,x) - xi**(alpha - 1) * SS.kv(1 - alpha,xi * x)) - diag)
+            else:
+                corr = N.where(x==0,norm * diag,norm * x**(1 - alpha) * (SS.kv(1 - alpha,x) - xi**(alpha - 1) * SS.kv(1 - alpha,xi * x)))
+    else:
+        if decompose:
+            diag = 2**(-alpha) * SS.gamma(1 - alpha)
+            corr = N.where(x==0,0,x**(1 - alpha) * SS.kv(1 - alpha,x) - diag)
+        else:
+            # testing for zero is dangerous, but kv seems to behave OK for arbitrarily small arguments
+            corr = N.where(x==0,norm * 2**(-alpha) * SS.gamma(1 - alpha),
+                                norm * x**(1 - alpha) * SS.kv(1 - alpha,x))
+
+    ps, ts = len(alphaab), len(times_f) / len(alphaab)
+    for i in range(ps):
+        for j in range(ps):
+            corr[i*ts:(i+1)*ts,j*ts:(j+1)*ts] *= alphaab[i,j]
+
+    if decompose:
+        return norm, diag, corr
+    else:
+        return corr
 
 
 def Cgw_100ns(alphaab,times_f,alpha=-2/3,fL=1.0/10000,approx_ksum=False):
@@ -310,6 +454,8 @@ try:
     blas = True
 except ImportError:
     blas = False
+
+blas = False
 
 # run doctests with python -m doctest background.py
 def blockmul(A,B,meta):
