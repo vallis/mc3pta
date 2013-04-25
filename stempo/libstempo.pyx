@@ -5,7 +5,6 @@ from cython cimport view
 
 import numpy
 cimport numpy
-import sets
 
 cdef extern from "tempo2.h":
     enum: MAX_PSR_VAL
@@ -173,6 +172,8 @@ cdef class tempopulsar:
     cpdef object pardict    # dictionary of parameter proxies
     cpdef public object prefit     # dictionary of pre-fit parameters
     cpdef public int nobs   # number of observations (public)
+    cpdef public object allflags    # a list of all flags that have values
+    cpdef public object flags       # a dictionary of numpy arrays with flag values
 
     # TO DO: is cpdef required here?
     cpdef jumpval, jumperr
@@ -208,6 +209,7 @@ cdef class tempopulsar:
 
         self.nobs = self.psr[0].nobs
         self._readpars(fixangularerror=fixangularerror)
+        self._readflags()
 
         # always do a fit...
 
@@ -238,9 +240,6 @@ cdef class tempopulsar:
 
         readParfile(self.psr,parFile,timFile,self.npsr);   # load the parameters    (all pulsars)
         readTimfile(self.psr,timFile,self.npsr);           # load the arrival times (all pulsars)
-
-    def getname(self):
-        return self.psr[0].name
 
     def _readpars(self,fixangularerror=True):
         cdef parameter *params = self.psr[0].param
@@ -279,6 +278,29 @@ cdef class tempopulsar:
         # but they don't seem to be used in the EPTA analysis
         # if(pPsr->param[param_wave_om].fitFlag[0]==1)
         #     nPol += pPsr->nWhite*2-1;
+
+    def _readflags(self):
+        cdef int i, j
+
+        # TO DO: make these attributes read only
+        self.allflags = []
+        self.flags = dict()
+
+        for i in range(self.nobs):
+            for j in range(self.psr[0].obsn[i].nFlags):
+                flag = self.psr[0].obsn[i].flagID[j][1:]
+
+                if flag not in self.allflags:
+                    self.allflags.append(flag)
+                    # the maximum flag-value length is hard-set in tempo2.h
+                    self.flags[flag] = numpy.zeros(self.nobs,dtype='a16')
+
+                self.flags[flag][i] = self.psr[0].obsn[i].flagVal[j]
+
+    # TO DO: possibly set the name?
+    property name:
+        def __get__(self):
+            return self.psr[0].name
 
     def __getitem__(self,key):
         return self.pardict[key]
@@ -363,41 +385,6 @@ cdef class tempopulsar:
             ret[i] = obsns[i].residual
 
         return ret
-
-    def uniqueflags(self):
-        """Returns a numpy array (strings) of the flags that have been set at
-            least once in the dataset"""
-        tflags = numpy.array([])
-
-        cdef int i
-        cdef int j
-        for i in range(self.nobs):
-            for j in range(self.psr[0].obsn[i].nFlags):
-                tflags = numpy.append(tflags, self.psr[0].obsn[i].flagID[j])
-
-        return sets.Set(tflags)
-
-    def flagvalue(self, flagid):
-        """Return a numpy array with the flag values for all observations for a
-            given flag id. If the flag is not set, the returned value for that
-            observation is ''
-            returned numpy array is 1D, with length number of observations"""
-
-        flagvals = numpy.empty(self.nobs, dtype='a16')
-        flagvals[:] = ""
-
-        cdef int i
-        cdef int j
-        if flagid in self.uniqueflags():
-            for i in range(self.nobs):
-                for j in range(self.psr[0].obsn[i].nFlags):
-                    if self.psr[0].obsn[i].flagID[j] == flagid:
-                        flagvals[i] = self.psr[0].obsn[i].flagVal[j]
-        else:
-            print "WARNING: flag not found in dataset", self.getname(), flagid
-
-        return flagvals
-
 
     # tempo2 design matrix as numpy array [nobs x ndim]
     # TODO: when start & finish are set, this function gives an error
