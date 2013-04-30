@@ -340,12 +340,13 @@ cdef class tempopulsar:
             return sum(self.pardict[par].fit for par in self.pardict)
 
     # TOAs in days (numpy.longdouble array)
-    property toas:
-        def __get__(self):
-            cdef long double [:] _toas = <long double [:self.nobs]>&(self.psr[0].obsn[0].bat)
-            _toas.strides[0] = sizeof(observation)
+    def toas(self):
+        cdef long double [:] _toas = <long double [:self.nobs]>&(self.psr[0].obsn[0].bat)
+        _toas.strides[0] = sizeof(observation)
 
-            return numpy.asarray(_toas)
+        updateBatsAll(self.psr,self.npsr)
+
+        return numpy.asarray(_toas).copy()
 
     # site arrival times; divide residuals by 86400.0 to subtract
     property stoas:
@@ -372,19 +373,15 @@ cdef class tempopulsar:
             return numpy.asarray(_freqs)
 
     # residuals in seconds
-    def residuals(self):
-        cdef int i
-        cdef numpy.ndarray[longdouble,ndim=1] ret = numpy.zeros(self.nobs,'f16')
+    def residuals(self,updatebats=True):
+        cdef long double [:] _res = <long double [:self.nobs]>&(self.psr[0].obsn[0].residual)
+        _res.strides[0] = sizeof(observation)
 
-        cdef observation *obsns = self.psr[0].obsn
-
-        updateBatsAll(self.psr,self.npsr)
+        if updatebats:
+            updateBatsAll(self.psr,self.npsr)
         formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
 
-        for i in range(self.nobs):
-            ret[i] = obsns[i].residual
-
-        return ret
+        return numpy.asarray(_res).copy()
 
     # tempo2 design matrix as numpy array [nobs x ndim]
     # TODO: when start & finish are set, this function gives an error
