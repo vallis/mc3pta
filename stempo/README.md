@@ -16,4 +16,4 @@ Running `make` should make `libstempo.so`, which you can keep in your working di
 
 ## Documentation ##
 
-For the moment, _in lieu_ of documentation, have a look at this [tutorial](http://nbviewer.ipython.org/urls/raw.github.com/vallis/mc3pta/master/stempo/libstempo-demo.ipynb).
+For the moment, _in lieu_ of documentation, have a look at this [tutorial](http://nbviewer.ipython.org/urls/raw.github.com/vallis/mc3pta/master/stempo/libstempo-demo.ipynb) (an [iPython notebook](http://ipython.org/notebook.html), visualized thanks to the [nbviewer](http://nbviewer.ipython.org/) service).
