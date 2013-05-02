@@ -404,11 +404,12 @@ cdef class tempopulsar:
 
     # run tempo2 fit
     # TO DO: see if the parameter-number mismatch is a problem
-    def fit(self):
-        updateBatsAll(self.psr,self.npsr)
-        formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
+    def fit(self,iters=1):
+        for i in range(iters):
+            updateBatsAll(self.psr,self.npsr)
+            formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
 
-        doFit(self.psr,self.npsr,0)
+            doFit(self.psr,self.npsr,0)
 
     # utility function
     def rd_hms(self):
