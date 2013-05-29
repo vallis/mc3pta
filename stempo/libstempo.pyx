@@ -268,10 +268,10 @@ cdef class tempopulsar:
         # TODO: it should also not be possible to replace or alter prefit,
         #       or to replace prefit.vals and prefit.errs
 
-        self.prefit.vals = numpy.fromiter((self.prefit[par].val for par in self.pars),'f16')
+        self.prefit.vals = numpy.fromiter((self.prefit[par].val for par in self.pars),numpy.longdouble)
         self.prefit.vals.flags.writeable = False
 
-        self.prefit.errs = numpy.fromiter((self.prefit[par].err for par in self.pars),'f16')
+        self.prefit.errs = numpy.fromiter((self.prefit[par].err for par in self.pars),numpy.longdouble)
         self.prefit.errs.flags.writeable = False
 
         # the designmatrix plugin also adds extra parameters for sinusoidal whitening
@@ -315,7 +315,7 @@ cdef class tempopulsar:
 
     property vals:
         def __get__(self):
-            ret = numpy.fromiter((self.pardict[par].val for par in self.pars),'f16')
+            ret = numpy.fromiter((self.pardict[par].val for par in self.pars),numpy.longdouble)
             ret.flags.writeable = False
             return ret
 
@@ -326,7 +326,7 @@ cdef class tempopulsar:
 
     property errs:
         def __get__(self):
-            ret = numpy.fromiter((self.pardict[par].err for par in self.pars),'f16')
+            ret = numpy.fromiter((self.pardict[par].err for par in self.pars),numpy.longdouble)
             ret.flags.writeable = False
             return ret
 
