@@ -1,4 +1,9 @@
-import os, math, re, collections
+import os, math, re
+
+try:
+    from collections import OrderedDict
+except ImportError:
+    from ordereddict import OrderedDict
 
 from libc cimport stdlib, stdio
 from cython cimport view
@@ -247,8 +252,8 @@ cdef class tempopulsar:
         # create live proxies for all the parameters
         # and collect the prefit values of the parameters
 
-        self.pardict = collections.OrderedDict()
-        self.prefit = collections.OrderedDict()
+        self.pardict = OrderedDict()
+        self.prefit = OrderedDict()
 
         for ct in range(MAX_PARAMS):
             for subct in range(params[ct].aSize):
