@@ -189,9 +189,9 @@ cdef class tempopulsar:
         global MAX_PSR, MAX_OBSN
 
         self.npsr = 1
-        self.psr = <pulsar *>stdlib.malloc(sizeof(pulsar)*MAX_PSR_VAL)
-
         MAX_PSR, MAX_OBSN = 1, 5000     # to save memory, only allocate space for this many pulsars and observations
+
+        self.psr = <pulsar *>stdlib.malloc(sizeof(pulsar)*MAX_PSR)
         initialise(self.psr,1)          # 1 for no warnings
 
         # read par and tim file
@@ -226,6 +226,7 @@ cdef class tempopulsar:
     def __dealloc__(self):
         for i in range(self.npsr):
             destroyOne(&(self.psr[i]))
+            stdlib.free(&(self.psr[i]))
 
     def _readfiles(self,parfile,timfile):
         cdef char parFile[MAX_PSR_VAL][MAX_FILELEN]
