@@ -76,7 +76,6 @@ cdef extern from "tempo2.h":
     void textOutput(pulsar *psr,int npsr,double globalParameter,int nGlobal,int outRes,int newpar,char *fname)
     void writeTim(char *timname,pulsar *psr,char *fileFormat)
 
-# TO DO: should I do also pre-fit values?
 cdef class tempopar:
     cdef public object name
 
@@ -216,12 +215,18 @@ cdef class tempopulsar:
         self._readpars(fixangularerror=fixangularerror)
         self._readflags()
 
+        # save prefit TOAs and residuals
+
+        self.prefit.toas = self.toas()
+        self.prefit.residuals = self.residuals(updatebats=False)
+
         # always do a fit...
+        self.fit()
 
-        updateBatsAll(self.psr,self.npsr)
-        formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
+        # updateBatsAll(self.psr,self.npsr)
+        # formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
 
-        doFit(self.psr,self.npsr,0)
+        # doFit(self.psr,self.npsr,0)
 
     def __dealloc__(self):
         for i in range(self.npsr):
