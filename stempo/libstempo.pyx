@@ -14,6 +14,7 @@ cimport numpy
 cdef extern from "tempo2.h":
     enum: MAX_PSR_VAL
     enum: MAX_FILELEN
+    enum: MAX_OBSN_VAL
     enum: MAX_PARAMS
     enum: MAX_JUMPS
     enum: param_pepoch
@@ -178,6 +179,7 @@ cdef class tempopulsar:
     cpdef public int nobs   # number of observations (public)
     cpdef public object allflags    # a list of all flags that have values
     cpdef public object flags       # a dictionary of numpy arrays with flag values
+    cpdef public double fitchisq
 
     # TO DO: is cpdef required here?
     cpdef jumpval, jumperr
@@ -188,7 +190,7 @@ cdef class tempopulsar:
         global MAX_PSR, MAX_OBSN
 
         self.npsr = 1
-        MAX_PSR, MAX_OBSN = 1, 5000     # to save memory, only allocate space for this many pulsars and observations
+        MAX_PSR, MAX_OBSN = 1, MAX_OBSN_VAL     # to save memory, only allocate space for this many pulsars and observations
 
         self.psr = <pulsar *>stdlib.malloc(sizeof(pulsar)*MAX_PSR)
         initialise(self.psr,1)          # 1 for no warnings
@@ -369,6 +371,7 @@ cdef class tempopulsar:
 
     # return TOA errors in microseconds (numpy.double array)
     property toaerrs:
+        """Return a (read-only) array of TOA errors in microseconds."""
         def __get__(self):
             cdef double [:] _toaerrs = <double [:self.nobs]>&(self.psr[0].obsn[0].toaErr)
             _toaerrs.strides[0] = sizeof(observation)
@@ -384,13 +387,18 @@ cdef class tempopulsar:
             return numpy.asarray(_freqs)
 
     # residuals in seconds
-    def residuals(self,updatebats=True):
+    def residuals(self,updatebats=True,formresiduals=True):
+        """Return a long-double numpy array of residuals (a private copy).
+        Update TOAs and recompute residuals if updatebats = True (default) and
+        formresiduals = True (default), respectively."""
+
         cdef long double [:] _res = <long double [:self.nobs]>&(self.psr[0].obsn[0].residual)
         _res.strides[0] = sizeof(observation)
 
         if updatebats:
             updateBatsAll(self.psr,self.npsr)
-        formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
+        if formresiduals:
+            formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
 
         return numpy.asarray(_res).copy()
 
@@ -398,14 +406,15 @@ cdef class tempopulsar:
     # TODO: when start & finish are set, this function gives an error
     #       self.ndim+1 = ma for FITfuncs
     #       -- Rutger
-    def designmatrix(self):
+    def designmatrix(self,updatebats=True):
         cdef int i
         cdef numpy.ndarray[double,ndim=2] ret = numpy.zeros((self.nobs,self.ndim+1),'d')
 
         cdef long double epoch = self.psr[0].param[param_pepoch].val[0]
         cdef observation *obsns = self.psr[0].obsn
 
-        updateBatsAll(self.psr,self.npsr)
+        if updatebats:
+            updateBatsAll(self.psr,self.npsr)
 
         for i in range(self.nobs):
             # always fit for arbitrary offset... that's the "+1"
@@ -421,6 +430,13 @@ cdef class tempopulsar:
             formResiduals(self.psr,self.npsr,1)     # 1 to remove the mean
 
             doFit(self.psr,self.npsr,0)
+
+        self.fitchisq = self.psr[0].fitChisq
+
+    def chisq(self):
+        res, err = self.residuals(), self.toaerrs
+
+        return numpy.sum(res * res / (1e-12 * err * err))
 
     # utility function
     def rd_hms(self):
@@ -442,9 +458,7 @@ cdef class tempopulsar:
 
             self.vals = dxs
 
-        res, err = self.residuals(), self.toaerrs
-
-        return -0.5 * numpy.sum(res * res / (1e-12 * err * err))
+        return -0.5 * self.chisq()
 
     def savepar(self,parfile):
         cdef char parFile[MAX_FILELEN]
