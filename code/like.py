@@ -49,7 +49,7 @@ def Cexp(alphaab,times_f,lam,alpha=1.0):
 
     return corr
 
-def Cflat(alphaab,times_f,lam):
+def Cflat(alphaab,times_f,correlation,threshold=1e-8):
     corr = N.zeros((len(times_f),len(times_f)),'d')
 
     ps, ts = len(alphaab), len(times_f) / len(alphaab)
@@ -57,8 +57,10 @@ def Cflat(alphaab,times_f,lam):
         t1, t2 = N.meshgrid(times_f[i*ts:(i+1)*ts],times_f[i*ts:(i+1)*ts])
         x = N.abs(t1 - t2)
 
-        # corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x < lam,1.0,0.0)
-        corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.where(x < lam,1.0 - x/lam,0.0)
+        if threshold > 0:
+            corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = N.piecewise(x,[x == 0, x > threshold],[1.0,0.0,correlation])
+        else:
+            corr[i*ts:(i+1)*ts,i*ts:(i+1)*ts] = (1 - correlation) * N.identity(ts) + N.where(x == 0,correlation,0.0)
 
     return corr
 
@@ -181,10 +183,11 @@ def Cgw_reg_year(alphaab,times_f,alpha=-2/3,fL=1.0/500,fH=None,decompose=False):
             diag = 2**(-alpha) * SS.gamma(1 - alpha) * (1 - xi**(2*alpha - 2))
 
         with numpy_seterr(divide='ignore'):
+            bessel = N.where(xi*x > 1e3,0.0,SS.kv(1 - alpha,xi * x))
             if decompose:
-                corr = N.where(x==0,0.0,x**(1 - alpha) * (SS.kv(1 - alpha,x) - xi**(alpha - 1) * SS.kv(1 - alpha,xi * x)) - diag)
+                corr = N.where(x==0,0.0,x**(1 - alpha) * (SS.kv(1 - alpha,x) - xi**(alpha - 1) * bessel) - diag)
             else:
-                corr = N.where(x==0,norm * diag,norm * x**(1 - alpha) * (SS.kv(1 - alpha,x) - xi**(alpha - 1) * SS.kv(1 - alpha,xi * x)))
+                corr = N.where(x==0,norm * diag,norm * x**(1 - alpha) * (SS.kv(1 - alpha,x) - xi**(alpha - 1) * bessel))
     else:
         if decompose:
             diag = 2**(-alpha) * SS.gamma(1 - alpha)

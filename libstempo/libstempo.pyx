@@ -84,6 +84,7 @@ cdef class tempopar:
     cdef void *_val
     cdef void *_err
     cdef int *_fitFlag
+    cdef int *_paramSet
 
     def __init__(self,*args,**kwargs):
         raise TypeError("This class cannot be instantiated from Python.")
@@ -96,6 +97,9 @@ cdef class tempopar:
                 return float((<double*>self._val)[0])
         def __set__(self,value):
             if not self._isjump:
+                if not self._paramSet[0]:
+                    self._paramSet[0] = 1
+
                 (<long double*>self._val)[0] = value    # can we set it to numpy.longdouble?
             else:
                 (<double*>self._val)[0] = value
@@ -120,7 +124,7 @@ cdef class tempopar:
 
     def __str__(self):
         # TO DO: proper precision handling
-        return '%s: %g +/- %g' % (self.name,self.val,self.err)
+        return '%s (%s): %g +/- %g' % (self.name,'fitted' if self.fit else 'not fitted',self.val,self.err)
 
 # since the __init__ for extension classes must have a Python signature,
 # we use a factory function to initialize its attributes to pure-C objects
@@ -135,9 +139,11 @@ cdef create_tempopar(parameter par,int subct):
     newpar._val = &par.val[subct]
     newpar._err = &par.err[subct]
     newpar._fitFlag = &par.fitFlag[subct]
+    newpar._paramSet = &par.paramSet[subct]
 
     return newpar
 
+# TODO: note that currently we cannot change the number of jumps programmatically
 cdef create_tempojump(pulsar *psr,int ct):
     cdef tempopar newpar = tempopar.__new__(tempopar)
 

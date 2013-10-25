@@ -57,9 +57,10 @@ ranges = {'PX': (0.03,10.0), 'M2': (0.0,3.0)}   # give absolute ranges here (e.g
 
 multipliers = {}                         # give relative ranges here (units of lsq stdev, e.g. [-4,4]); otherwise will use the default value
 
-priors  = {'PX': (0.03,10.0),'ECC': (0.0,1.0),'SINI': (-1.0,1.0),'M2': (0.0,3.0),'log10_efac': (-1,1),'efac': (0.1,10.0),'log10_equad': (-2,2),'equad': (0.01,100)}  # give physical priors here
-#priors = {'ECC': (0.0,1.0),'SINI': (-1.0,1.0),'M2': (0.0,3.0),'PX': (0.03,10.0),'POSPX': pospx,'log10_efac': (-1,1)}
-default = {'log10_efac': 0, 'efac': 1.0, 'log10_equad': -10, 'equad': 0}  # default tempo2 values for extra parameters
+priors  = {'PX': (0.03,10.0),'ECC': (0.0,1.0),'SINI': (0,1.0),'M2': (0.0,3.0),               # give physical priors here
+           'log10_efac': (-1,1),'efac': (0.1,10.0),'log10_equad': (-2,2),'equad': (0.01,100),'log10_Ared': (-16,-10),'gammared': (0,6)}
+#priors = {'ECC': (0.0,1.0),'SINI': (0,1.0),'M2': (0.0,3.0),'PX': (0.03,10.0),'POSPX': pospx,'log10_efac': (-1,1)}
+default = {'log10_efac': 0, 'efac': 1.0, 'log10_equad': -10, 'equad': 0, 'log10_Ared': -20, 'gammared': 0}  # default tempo2 values for extra parameters
 
 offsets = {}                                    # parameters that should be offset from their best-fit value;
                                                 # note that offsets are restored when comparing with priors
@@ -85,24 +86,34 @@ def dot(*args):
     return reduce(N.dot,args)
 
 def redlike(pardict,method='inv'):
-    global pulsar, err
+    global pulsar, err, redF, redf
 
-    efac, equad = 1.0, 0.0
+    efac, equad, Ared = 1.0, 0.0, 0.0
+
     if 'efac' in pardict:
         efac = pardict['efac']
     elif 'log10_efac' in pardict:
         efac = 10**pardict['log10_efac']
+
     if 'equad' in pardict:
         equad = pardict['equad']
     elif 'log10_equad' in pardict:
         equad = 10**pardict['log10_equad']
+
+    if 'log10_Ared' in pardict:
+        Ared = 10**pardict['log10_Ared']
 
     if method == 'inv':
         M = pulsar.designmatrix()
         res = N.array(pulsar.residuals(updatebats=False),'d')
 
         Cdiag = (efac*err)**2 + (equad*1e-6*N.ones(len(err)))**2
-        Cinv = N.diag(1/Cdiag)
+
+        if Ared:
+            C = N.diag(Cdiag) + Ared**2 * N.dot(redF,N.dot(N.diag(redf**(-pardict['gammared'])),redF.T))
+            Cinv = N.linalg.inv(C)
+        else:
+            Cinv = N.diag(1/Cdiag)
 
         CinvM = N.dot(Cinv,M)
         A = dot(M.T,CinvM)
@@ -198,11 +209,15 @@ def multiprior(cube,ndim,nparams):
     for i,par in enumerate(parameters):
         x0,x1 = ranges[par]
         if parameters[i] == 'PX':
-            cube[i] = 1/(DMdist-math.sqrt(2)*0.2*DMdist*erfinv(2*cube[i]-1))                    # prior corresponding to Gaussian distribution in distance centered
-                                                                                    # around x0 with standard deviation x1
-            #cube[i] = x0*math.exp(cube[i]*math.log(x1/x0))                          # logarithmic prior
+            cube[i] = 1/(DMdist-math.sqrt(2)*0.2*DMdist*erfinv(2*cube[i]-1))    # prior corresponding to Gaussian distribution in distance centered
+                                                                                # around x0 with standard deviation x1
+            # cube[i] = x0*math.exp(cube[i]*math.log(x1/x0))                    # logarithmic prior
+        elif parameters[i] == 'SINI':
+            y0, y1 = math.sqrt(1.0 - x1**2), math.sqrt(1.0 - x0**2)     # find the corresponding cosines
+            y = y0 * cube[i] * (y1 - y0)                                # draw uniformly in cos
+            cube[i] = math.sqrt(1.0 - y**2)                             # compute the sine
         else:
-            cube[i] = x0 + cube[i] * (x1 - x0)                                      # uniform prior over range [x0, x1]
+            cube[i] = x0 + cube[i] * (x1 - x0)                          # uniform prior over range [x0, x1]
 
 # evals = 1
 # lapse = 0.0
@@ -223,7 +238,14 @@ def multilog(cube,ndim,nparams):
             x0, x1 = ranges[par]
             p0, p1 = priors[par]
 
-            prior = prior * float((x1 - x0) / (p1 - p0)) if p0 <= pardict[par] + offsets[par] <= p1 else 0
+            if p0 <= pardict[par] + offsets[par] <= p1:
+                if par == 'SINI':
+                    x0, x1 = math.sqrt(1.0 - x1**2), math.sqrt(1.0 - x0**2)
+                    p0, p1 = math.sqrt(1.0 - p1**2), math.sqrt(1.0 - p0**2)
+
+                prior = prior * float((x1 - x0) / (p1 - p0))
+            else:
+                prior = 0
 
     efac = 1.0
     for i,par in enumerate(parameters):
@@ -262,6 +284,30 @@ def randomtuple():
         if logP(value) > -N.inf:
             return value
 
+def setuprednoise(components=10):
+    global pulsar, redF, redf
+
+    day = 24 * 3600
+    year = 365.25 * day
+
+    t = pulsar.toas()
+    minx, maxx = N.min(t), N.max(t)
+    x = (t - minx) / (maxx - minx)
+    T = (day/year) * (maxx - minx)
+
+    size = 2*components
+    redF = N.zeros((pulsar.nobs,size),'d')
+    redf = N.zeros(size,'d')
+
+    for i in range(components):
+        redF[:,2*i]   = N.cos(2*math.pi*(i+1)*x)
+        redF[:,2*i+1] = N.sin(2*math.pi*(i+1)*x)
+
+        redf[2*i] = redf[2*i+1] = (i+1) / T
+
+    # include the normalization of the prior in the Fourier matrices
+    norm = year**2 / (12 * math.pi**2 * T)
+    redF = math.sqrt(norm) * redF
 
 # main sampling function
 
@@ -304,6 +350,9 @@ def sample(pulsarfile='cJ0437-4715',pulsardir='.',suffix=None,outputdir='.',
             parameters = fitpars.split(',')
     else:
         parameters = pulsar.pars
+
+    if 'log10_Ared' in parameters:
+        setuprednoise()
 
     ndim = len(parameters)
 
