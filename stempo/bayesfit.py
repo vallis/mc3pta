@@ -52,20 +52,34 @@ def rad2minsec(val,fmt='hms'):
 def pospx(pardict):
     return 1.0 if pardict['PX'] > 0 else 0
 
-ranges = {'PX': (0.03,10.0), 'M2': (0.0,3.0)}   # give absolute ranges here (e.g., [0,2*math.pi]); otherwise it will be filled up with relative ranges
-#ranges = {'PX': (0.03,10.0), 'M2': (0.0,3.0), 'OM': (50.72,50.74), 'T0': (51626.175,51626.185), 'A1': (55.32968,55.32974), 'ECC': (0.000797,0.00079720925691)}
-
+#ranges = {'PX': (0.03,10.0), 'M2': (0.0,30.0)}   # give absolute ranges here (e.g., [0,2*math.pi]); otherwise it will be filled up with relative ranges
+#ranges = {'PX': (0.03,2.0), 'SINI': (0.,1.), 'M2': (0.0,30.0), 'OM': (50.71,50.74), 'T0': (51626.170,51626.185), 'A1': (55.3296,55.32975), 'ECC': (0.0007966,0.00079720925691)}
 multipliers = {}                         # give relative ranges here (units of lsq stdev, e.g. [-4,4]); otherwise will use the default value
+#multipliers = {'F0': 100}
 
-priors  = {'PX': (0.03,10.0),'ECC': (0.0,1.0),'SINI': (0,1.0),'M2': (0.0,3.0),               # give physical priors here
-           'log10_efac': (-1,1),'efac': (0.1,10.0),'log10_equad': (-2,2),'equad': (0.01,100),'log10_Ared': (-16,-10),'gammared': (0,6)}
+priors  = {'PX': (0.03,3.0),'ECC': (0.0,1.0),'SINI': (0,1.0),'M2': (0.0,30.0),               # give physical priors here
+           'log10_efac':    (-1,1),'efac':   (0.1,10.0),
+           'log10_equad':   (-2,2),'equad':  (0.01,100),
+           'log10_jitter':  (-2,2),'jitter': (0.01,100),
+           'log10_Ared': (-16,-10),'gammared':    (0,6)}
+
 #priors = {'ECC': (0.0,1.0),'SINI': (0,1.0),'M2': (0.0,3.0),'PX': (0.03,10.0),'POSPX': pospx,'log10_efac': (-1,1)}
-default = {'log10_efac': 0, 'efac': 1.0, 'log10_equad': -10, 'equad': 0, 'log10_Ared': -20, 'gammared': 0}  # default tempo2 values for extra parameters
+
+default = {'log10_efac':     0, 'efac':   1.0,
+           'log10_equad':  -10, 'equad':    0,
+           'log10_jitter': -10, 'jitter':   0,
+           'log10_Ared':   -20, 'gammared': 0}  # default tempo2 values for extra parameters
 
 offsets = {}                                    # parameters that should be offset from their best-fit value;
                                                 # note that offsets are restored when comparing with priors
 
+# for red-noise 1640 runs
+#ranges['PB']  = (175.4606616,175.460662389)
+#ranges['ECC'] = (0.000796935975685,0.000797409256747)
 # prior and log likelihood for emcee
+
+# ranges for J2317+1439
+ranges = {'RAJ': (6.096234141,6.09623415276), 'DECJ': (0.255842204113,0.255842226601), 'F0': (-1.88456536587e-11,1.88456536587e-11), 'F1': (-2.05208844075e-16,-2.04284428097e-16), 'PMRA': (-2.07236158776,0.442080521267), 'PMDEC': (1.13763199666,4.99884819693), 'PB': (2.45933146053,2.45933146508), 'PBDOT': (-5.50429041509e-13,1.31636514207e-11), 'A1': (2.31394585263,2.3139501895), 'TASC': (54000.2547666,54000.2547673), 'EPS1': (-8.27952935959e-07,1.90708018935e-06), 'EPS1DOT': (-3.57866593382e-14,3.08417896899e-14), 'EPS2': (-1.71753802182e-06,1.55313528073e-06), 'EPS2DOT': (-2.8342553965e-14,7.00709623957e-14), 'PX': (0.03,3.0)}
 
 def logP(xs):
     global pulsar, parameters, priors, offsets
@@ -86,9 +100,9 @@ def dot(*args):
     return reduce(N.dot,args)
 
 def redlike(pardict,method='inv'):
-    global pulsar, err, redF, redf
+    global pulsar, err, redF, redf, jitterU
 
-    efac, equad, Ared = 1.0, 0.0, 0.0
+    efac, equad, Ared, jitter = 1.0, 0.0, 0.0, 0.0
 
     if 'efac' in pardict:
         efac = pardict['efac']
@@ -100,12 +114,53 @@ def redlike(pardict,method='inv'):
     elif 'log10_equad' in pardict:
         equad = 10**pardict['log10_equad']
 
-    if 'log10_Ared' in pardict:
+    if 'Ared' in pardict:
+        Ared = pardict['Ared'] 
+    elif 'log10_Ared' in pardict:
         Ared = 10**pardict['log10_Ared']
+
+    if 'jitter' in pardict:
+        jitter = pardict['jitter']
+    elif 'log10_jitter' in pardict:
+        jitter = 10**pardict['log10_jitter']
 
     if method == 'inv':
         M = pulsar.designmatrix()
         res = N.array(pulsar.residuals(updatebats=False),'d')
+
+        Cdiag = (efac*err)**2 + (equad*1e-6*N.ones(len(err)))**2
+
+        if Ared:
+            phi = Ared**2 * redf**(-pardict['gammared'])
+
+        if jitter:
+            phi_j = (1e-6*jitter)**2 * N.ones(jitterU.shape[1])
+
+            F   = N.hstack((redF,jitterU)) if Ared else jitterU
+            phi = N.hstack((phi,phi_j))    if Ared else phi_j
+
+        if Ared or jitter:
+            Ninv = N.diag(1/Cdiag)
+            NinvF = dot(Ninv,F)
+            X = N.diag(1/phi) + dot(F.T,NinvF)  # invphi + FTNinvF
+
+            Cinv = Ninv - dot(NinvF,N.linalg.inv(X),NinvF.T)
+            Cdet = N.sum(N.log(Cdiag)) + N.sum(N.log(phi)) + N.linalg.slogdet(X)[1]
+        else:
+            Cinv = N.diag(1/Cdiag)
+            Cdet = N.sum(N.log(Cdiag))
+
+        CinvM = N.dot(Cinv,M)
+        A = dot(M.T,CinvM)
+
+        invA = N.linalg.inv(A)
+        CinvMres = dot(res,CinvM)
+
+        res = (- 0.5 * dot(res,Cinv,res) + 0.5 * dot(CinvMres,invA,CinvMres.T) - 0.5 * Cdet - 0.5 * N.linalg.slogdet(A)[1]
+               - 0.5 * (M.shape[0] - M.shape[1]) * math.log(2.0*math.pi))
+    elif method == 'invold':
+        M = pulsar.designmatrix()
+        resid = N.array(pulsar.residuals(updatebats=False),'d')
 
         Cdiag = (efac*err)**2 + (equad*1e-6*N.ones(len(err)))**2
 
@@ -120,7 +175,7 @@ def redlike(pardict,method='inv'):
 
         Cp = Cinv - dot(CinvM,N.linalg.inv(A),CinvM.T)
 
-        res = (- 0.5 * dot(res,Cp,res) + 0.5 * N.linalg.slogdet(Cinv)[1] - 0.5 * N.linalg.slogdet(A)[1]
+        res = (- 0.5 * dot(resid,Cp,resid) + 0.5 * N.linalg.slogdet(Cinv)[1] - 0.5 * N.linalg.slogdet(A)[1]
                - 0.5 * (M.shape[1] - M.shape[0]) * math.log(2.0*math.pi))
     elif method == 'svd':
         M = pulsar.designmatrix()
@@ -203,19 +258,25 @@ def logPL(xs):
 
 # prior transformation and log likelihood for multinest
 
+mirror_sini = False
+
 def multiprior(cube,ndim,nparams):
     global parameters, ranges, DMdist
 
     for i,par in enumerate(parameters):
         x0,x1 = ranges[par]
         if parameters[i] == 'PX':
-            cube[i] = 1/(DMdist-math.sqrt(2)*0.2*DMdist*erfinv(2*cube[i]-1))    # prior corresponding to Gaussian distribution in distance centered
-                                                                                # around x0 with standard deviation x1
+            normalize = 2./(math.erf((DMdist*x1-1.)/(math.sqrt(2)*0.2*DMdist*x1)) - math.erf((DMdist*x0-1.)/(math.sqrt(2)*0.2*DMdist*x0)))
+            cube[i] = 1/(DMdist-math.sqrt(2)*0.2*DMdist*erfinv(2*cube[i]/normalize + math.erf((DMdist*x0-1)/(math.sqrt(2)*0.2*DMdist*x0))))
             # cube[i] = x0*math.exp(cube[i]*math.log(x1/x0))                    # logarithmic prior
         elif parameters[i] == 'SINI':
             y0, y1 = math.sqrt(1.0 - x1**2), math.sqrt(1.0 - x0**2)     # find the corresponding cosines
-            y = y0 * cube[i] * (y1 - y0)                                # draw uniformly in cos
+            if mirror_sini:
+                y = -1.0 + 2.0 * cube[i]                                # mirrored cosi mapping ([-1,1] -> [0,1] + [1,0]) to avoid abrupt cutoff at sini=1
+            else:
+                y = y0 + cube[i] * (y1 - y0)                            # draw uniformly in cos
             cube[i] = math.sqrt(1.0 - y**2)                             # compute the sine
+            #cube[i] = x0 + cube[i] * (x1 - x0)                                        # uniform prior over range [x0, x1]
         else:
             cube[i] = x0 + cube[i] * (x1 - x0)                          # uniform prior over range [x0, x1]
 
@@ -309,11 +370,31 @@ def setuprednoise(components=10):
     norm = year**2 / (12 * math.pi**2 * T)
     redF = math.sqrt(norm) * redF
 
+def setupjitter(dt=1):
+    global pulsar, jitterU
+
+    times = 86400.0 * pulsar.toas()
+    isort = N.argsort(times)
+    
+    bucket_ref = [times[isort[0]]]
+    bucket_ind = [[isort[0]]]
+    
+    for i in isort[1:]:
+        if times[i] - bucket_ref[-1] < dt:
+            bucket_ind[-1].append(i)
+        else:
+            bucket_ref.append(times[i])
+            bucket_ind.append([i])
+        
+    jitterU = N.zeros((len(times),len(bucket_ind)),'d')
+    for i,l in enumerate(bucket_ind):
+        jitterU[l,i] = 1
+
 # main sampling function
 
 def sample(pulsarfile='cJ0437-4715',pulsardir='.',suffix=None,outputdir='.',
            procs=1,fitpars=None,walkers=200,nsteps=100,ball=None,
-           reseed=None,useprefitvals=False,showml=False,improveml=False,
+           reseed=None,resume=False,useprefitvals=False,showml=False,improveml=False,efficiency='0.8',
            method='emcee',ntemps=1,writeparfile=False,dist=10.):
     global pulsar, multiplier, parameters, ranges, multipliers, priors, offsets, err, DMdist
     # evals, lapse
@@ -331,6 +412,8 @@ def sample(pulsarfile='cJ0437-4715',pulsardir='.',suffix=None,outputdir='.',
 
     # find tempo2 files
     pulsarfile, parfile, timfile = sampleutils.findtempo2(pulsarfile,pulsardir=pulsardir,debug=printdebug)
+#    parfile, timfile = '../eptadata/par/' + pulsarfile + '_EPTA_0.0.par', '../eptadata/tim/' + pulsarfile + '_EPTA_0.0.tim'
+#    parfile, timfile = '../nanograv/par/' + pulsarfile + '_noPX.par', '../nanograv/tim/' + pulsarfile + '_NANOGrav_dfg+12.tim'
     whichpulsar = os.path.basename(pulsarfile)
 
     # initialize Cython proxy for tempo2 pulsar
@@ -351,8 +434,10 @@ def sample(pulsarfile='cJ0437-4715',pulsardir='.',suffix=None,outputdir='.',
     else:
         parameters = pulsar.pars
 
-    if 'log10_Ared' in parameters:
+    if 'log10_Ared' in parameters or 'Ared' in parameters:
         setuprednoise()
+    if 'log10_jitter' in parameters or 'jitter' in parameters:
+        setupjitter()
 
     ndim = len(parameters)
 
@@ -426,10 +511,12 @@ def sample(pulsarfile='cJ0437-4715',pulsardir='.',suffix=None,outputdir='.',
                 p0 = data[:,:,-1,:]
             else:
                 data = N.load('{0}/chain-{1}.npy'.format(outputdir,reseed))
-                p0 = data[:,-1,:]
+                p0 = [data[:,-1,:]]
         else:
             # initialize walkers in a Gaussian ball (rescaled by ranges)
             p0 = [[randomtuple() for i in range(walkers)] for j in range(ntemps)]
+
+        p1 = [[randomtuple() for i in range(walkers)] for j in range(ntemps)]
 
         if ntemps > 1:
             sampler = emcee.PTSampler(ntemps,walkers,ndim,logL,logP,threads=int(procs))
@@ -476,9 +563,17 @@ def sample(pulsarfile='cJ0437-4715',pulsardir='.',suffix=None,outputdir='.',
     elif method == 'multinest':
         outfile = '{0}/{1}{2}-'.format(outputdir,whichpulsar,'' if suffix is None else '-' + suffix)
 
+        if efficiency[-1] == 'C' or efficiency[-1] == 'c':
+            const_eff = True
+            eff = float(efficiency[:-1])
+        else:
+            const_eff = False
+            eff = float(efficiency)
+
         pymultinest.run(multilog,multiprior,ndim,
-                        n_live_points=walkers,sampling_efficiency=0.3,                           # 0.3/0.8 for evidence/parameter evaluation
-                        outputfiles_basename=outfile,resume=False,verbose=True,init_MPI=False)   # if init_MPI=False, I should be able to use MPI in Python
+                        n_live_points=walkers,sampling_efficiency=eff,                            # 0.3/0.8 for evidence/parameter evaluation
+                        #importance_nested_sampling = const_eff,const_efficiency_mode = const_eff, # possible with newer MultiNest
+                        outputfiles_basename=outfile,resume=resume,verbose=True,init_MPI=False)   # if init_MPI=False, I should be able to use MPI in Python
 
         # if we're not root, we exit, and let him (her?) do the statistics
         if MPI.COMM_WORLD.Get_rank() != 0:
@@ -585,9 +680,11 @@ if __name__ == '__main__':
     parser.add_argument('-s',default=None,            help='suffix for save files')
     parser.add_argument('-r',default=None,            help='restart emcee from this chain file')
     parser.add_argument('-f',action='store_true',     help='write best-fit parameter values to .par file [false]')
+    parser.add_argument('-R',action='store_true',     help='resume multinest run [false]')
 
     parser.add_argument('-M',action='store_true',     help='use multinest (use emcee by default)')
     parser.add_argument('-T',type=int,default=1,      help='number of emcee parallel-tempering chains [1 for no PT]')
+    parser.add_argument('-E',type=str,default='0.8',  help='multinest efficiency mode [e.g. 0.3, 0.8, append C for constant]')
 
     parser.add_argument('-p',type=int,default=1,      help='number of processors [1 for emcee, use MPI for multinest]')
     parser.add_argument('-n',default=None,            help='comma-separated list of search parameters [defaults to par-file selection]')
@@ -613,6 +710,9 @@ if __name__ == '__main__':
     if args.r and args.M:
         parser.error('Cannot restart multinest from emcee chain file.')
 
+    if args.R and not args.M:
+        parser.error('Currently I do not support resuming emcee runs.')
+
     if args.T > 1 and args.M:
         parser.error('Cannot use parallel tempering in multinest.')
 
@@ -626,7 +726,19 @@ if __name__ == '__main__':
             except ValueError:
                 parser.error('Improper prior specification: %s' % spec)
 
-    sample(pulsarfile=args.pulsar,pulsardir=args.d,outputdir=args.o,suffix=args.s,reseed=args.r,writeparfile=args.f,
-           method=('multinest' if args.M else 'emcee'),ntemps=args.T,
+    # allow individual specification of multipliers
+    if args.b and ':' in args.b:
+        specs = args.b.split('/')
+        for spec in specs:
+            try:
+                par, p01 = spec.split(':')
+                multipliers[par] = float(p01)
+            except ValueError:
+                parser.error('Improper multiplier specification: %s' % spec)
+
+        args.b=None
+
+    sample(pulsarfile=args.pulsar,pulsardir=args.d,outputdir=args.o,suffix=args.s,reseed=args.r,resume=args.R,writeparfile=args.f,
+           method=('multinest' if args.M else 'emcee'),ntemps=args.T,efficiency=args.E,
            procs=args.p,fitpars=args.n,walkers=args.w,nsteps=args.N,
            ball=args.b,useprefitvals=args.P,showml=args.L,improveml=args.I,dist=args.D)
