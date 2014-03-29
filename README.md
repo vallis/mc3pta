@@ -2,7 +2,7 @@
 
 This is the JPL's group Bayesian-inference pipeline for the [first IPTA mock data challenge](http://www.ipta4gw.org/?page_id=89). See also our [submission](http://www.vallis.org/ipta/submission.html) to the challenge.
 
-This is also the home of the `libstempo` Python wrapper for tempo2. If that's what you're looking for, you need only the `libstempo` folder. Look there for installation instructions.
+This used to be the home of the `libstempo` Python wrapper for tempo2. If that's what you're looking for, look in https://github.com/vallis/libstempo, and at the `libstempo` homepage at http://vallis.github.io/libstempo.
 
 ## Moving on to the challenge... ###
 
