@@ -85,7 +85,7 @@ def loadraw(challenge,limit=None):
 
 def lnprob(x):
     """logL stub function for emcee. It needs to use global variables because otherwise
-    multiprocessing.map will need to transmit big arrays to the slave processes."""
+    multiprocessing.map will need to transmit big arrays to the subordinate processes."""
     global resid_f,cgw,cpn
 
     return logL(resid_f,cgw,cpn,A=x[0],n=1,cgwunit='100ns')
